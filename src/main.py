@@ -31,7 +31,7 @@ def point_inside_block(x, y):
     return True
   level_x = int(x // TILE_SIZE)
   level_y = int(y // TILE_SIZE)
-  return level[level_x][level_y] == 1
+  return level[level_y][level_x] == 1
 
 class Light:
   def __init__(self, x, y, num_rays):
@@ -54,24 +54,35 @@ class Light:
       intersection = ray.compute_level_intersection_point()
       self.intersections.append(intersection)
 
+  def render_visibility_polygon(self):
+    for index, intersection in enumerate(self.intersections):
+      next_intersection = self.intersections[(index + 1) % len(self.intersections)]
+      triangle = [(self.x, self.y), (intersection[0], intersection[1]), (next_intersection[0], next_intersection[1])]
+      pygame.draw.polygon(display, (255, 0, 0), triangle)
+
   def render(self):
-    pygame.draw.circle(display, (255, 0, 0), (self.x, self.y), 3)
-    for intersection in self.intersections:
-      pygame.draw.line(display, (255, 0, 0), (self.x, self.y), (intersection[0], intersection[1]))
+    self.render_visibility_polygon()
+    pygame.draw.circle(display, (255, 255, 0), (self.x, self.y), 10)
 
 class Ray:
   def __init__(self, x, y, angle):
     self.x = x
     self.y = y
-    self.angle = angle
+    self.angle = self.normalise_angle(angle)
+
+  def normalise_angle(self, angle):
+    angle = angle % (2 * math.pi)
+    if angle < 0:
+      angle = (2 * math.pi) + angle
+    return angle
 
   def compute_level_intersection_point(self):
     x = 0
     y = 0
-    steps = [c * 0.1 for c in range(0, 1000)]
+    steps = [c * 0.5 for c in range(0, 1500)]
     for c in steps:
-      x += self.x + c * math.cos(self.angle)
-      y += self.y + c * math.sin(self.angle)
+      x = self.x + c * math.cos(self.angle)
+      y = self.y + c * math.sin(self.angle)
       if point_inside_block(x, y):
         break
     return x, y
@@ -96,8 +107,12 @@ def draw_level():
       rect = pygame.Rect(x, y, TILE_SIZE, TILE_SIZE)
       pygame.draw.rect(display, (255, 255, 255), rect, 1)
 
-light_x = 0
-light_y = 0
+light_x = 200
+light_y = 200
+light_dx = 0
+light_dy = 0
+light_speed = 5
+
 while is_game_running:
   display.fill((0, 0, 0))
   dt = clock.tick(FPS)
@@ -110,16 +125,28 @@ while is_game_running:
         is_game_running = False
         pygame.quit()
       if event.key == pygame.K_LEFT:
-        light_x -= 1
+        light_dx = -light_speed
       if event.key == pygame.K_RIGHT:
-        light_x += 1
+        light_dx = light_speed
       if event.key == pygame.K_UP:
-        light_y -= 1
+        light_dy = -light_speed
       if event.key == pygame.K_DOWN:
-        light_y += 1
+        light_dy = light_speed
+    if event.type == pygame.KEYUP:
+      if event.key == pygame.K_LEFT:
+        light_dx = 0
+      if event.key == pygame.K_RIGHT:
+        light_dx = 0
+      if event.key == pygame.K_UP:
+        light_dy = 0
+      if event.key == pygame.K_DOWN:
+        light_dy = 0
+
+  light_x += light_dx
+  light_y += light_dy
 
   draw_level()
-  light = Light(200 + light_x, 200 + light_y, 1024)
+  light = Light(light_x, light_y, 256)
   light.update()
   light.render()
 

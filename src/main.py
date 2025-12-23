@@ -8,6 +8,9 @@ DISPLAY_HEIGHT = 480
 TILE_SIZE = 32
 FPS = 60
 
+def compute_middle_of_tile_in_pixels(tile_x, tile_y):
+  return (tile_x * TILE_SIZE) + (TILE_SIZE / 2), (tile_y * TILE_SIZE) + (TILE_SIZE / 2)
+
 level = [
   [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
   [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
@@ -47,6 +50,9 @@ class Light:
       rays.append(Ray(self.x, self.y, angle))
     return rays
 
+  def patrol(self):
+    pass
+
   def update(self):
     rays = self.init_rays()
     self.intersections = []
@@ -79,7 +85,7 @@ class Ray:
   def compute_level_intersection_point(self):
     x = 0
     y = 0
-    steps = [c * 0.5 for c in range(0, 1500)]
+    steps = [c * 2 for c in range(0, 1500)]
     for c in steps:
       x = self.x + c * math.cos(self.angle)
       y = self.y + c * math.sin(self.angle)
@@ -107,43 +113,33 @@ def draw_level():
       rect = pygame.Rect(x, y, TILE_SIZE, TILE_SIZE)
       pygame.draw.rect(display, (255, 255, 255), rect, 1)
 
-light_x = 200
-light_y = 200
-light_dx = 0
-light_dy = 0
-light_speed = 5
+light_x, light_y = compute_middle_of_tile_in_pixels(3, 3)
+light_speed = 100
 
 while is_game_running:
   display.fill((0, 0, 0))
-  dt = clock.tick(FPS)
+  dt = clock.tick(FPS) / 1000
+
+  light_dx = 0
+  light_dy = 0
+
+  keys = pygame.key.get_pressed()
+  if keys[pygame.K_LEFT]:
+    light_dx -= light_speed
+  if keys[pygame.K_RIGHT]:
+    light_dx += light_speed
+  if keys[pygame.K_UP]:
+    light_dy -= light_speed
+  if keys[pygame.K_DOWN]:
+    light_dy += light_speed
+  if keys[pygame.K_ESCAPE]:
+    is_game_running = False
   for event in pygame.event.get():
     if event.type == pygame.QUIT:
       is_game_running = False
-      pygame.quit()
-    if event.type == pygame.KEYDOWN:
-      if event.key == pygame.K_ESCAPE:
-        is_game_running = False
-        pygame.quit()
-      if event.key == pygame.K_LEFT:
-        light_dx = -light_speed
-      if event.key == pygame.K_RIGHT:
-        light_dx = light_speed
-      if event.key == pygame.K_UP:
-        light_dy = -light_speed
-      if event.key == pygame.K_DOWN:
-        light_dy = light_speed
-    if event.type == pygame.KEYUP:
-      if event.key == pygame.K_LEFT:
-        light_dx = 0
-      if event.key == pygame.K_RIGHT:
-        light_dx = 0
-      if event.key == pygame.K_UP:
-        light_dy = 0
-      if event.key == pygame.K_DOWN:
-        light_dy = 0
 
-  light_x += light_dx
-  light_y += light_dy
+  light_x += light_dx * dt
+  light_y += light_dy * dt
 
   draw_level()
   light = Light(light_x, light_y, 256)
@@ -152,4 +148,5 @@ while is_game_running:
 
   pygame.display.flip()
 
+pygame.quit()
 sys.exit(0)

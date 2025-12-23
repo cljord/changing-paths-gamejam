@@ -36,12 +36,18 @@ def point_inside_block(x, y):
   level_y = int(y // TILE_SIZE)
   return level[level_y][level_x] == 1
 
+def distance(x1, x2, y1, y2):
+  return math.sqrt(((x2 - x1) ** 2) + ((y2 - y1) ** 2))
+
 class Light:
   def __init__(self, x, y, num_rays):
     self.x = x
     self.y = y
     self.num_rays = num_rays
     self.intersections = []
+    self.patrol_route = [(3, 3), (16, 3), (16, 11), (3, 11)]
+    self.current_patrol_route_index = 1
+    self.speed = 50
 
   def init_rays(self):
     rays = []
@@ -50,15 +56,27 @@ class Light:
       rays.append(Ray(self.x, self.y, angle))
     return rays
 
-  def patrol(self):
-    pass
+  def patrol(self, dt):
+    target_tile = self.patrol_route[self.current_patrol_route_index]
+    target_point = compute_middle_of_tile_in_pixels(*target_tile)
+    x_distance = target_point[0] - self.x
+    y_distance = target_point[1] - self.y
+    angle = math.atan2(y_distance, x_distance)
+    dx = math.cos(angle) * self.speed
+    dy = math.sin(angle) * self.speed
+    self.x += dx * dt
+    self.y += dy * dt
+    if math.sqrt((x_distance ** 2) + (y_distance ** 2)) < 2:
+      self.current_patrol_route_index += 1
+      self.current_patrol_route_index %= len(self.patrol_route)
 
-  def update(self):
+  def update(self, dt):
     rays = self.init_rays()
     self.intersections = []
     for ray in rays:
       intersection = ray.compute_level_intersection_point()
       self.intersections.append(intersection)
+    self.patrol(dt)
 
   def render_visibility_polygon(self):
     for index, intersection in enumerate(self.intersections):
@@ -97,7 +115,73 @@ class Player:
   def __init__(self, x, y):
     self.x = x
     self.y = y
+    self.w = 10
+    self.h = 20
+    self.dx = 0
+    self.dy = 0
+    self.speed = 75
+    self.gravity = 100
+    self.jump_velocity = -200
+    self.on_ground = False
 
+  def update(self, dt):
+    keys = pygame.key.get_pressed()
+    # horizontal movement
+    if keys[pygame.K_LEFT]:
+      self.dx = -self.speed
+    elif keys[pygame.K_RIGHT]:
+      self.dx = self.speed
+    else:
+      self.dx = 0
+
+    # jump
+    if keys[pygame.K_UP] and self.on_ground:
+      self.dy = self.jump_velocity
+      self.on_ground = False
+    self.dy += self.gravity * dt
+
+    # axis separation, move x first, then y
+    self.x += self.dx * dt
+
+    left = self.x
+    right = self.x + self.w - 1
+    top = self.y
+    bottom = self.y + self.h - 1
+    if self.dx > 0:
+      if point_inside_block(right, top + 1) or point_inside_block(right, bottom - 1):
+        # snap player and remove x velocity component
+        tile_x = int(right // TILE_SIZE)
+        self.x = tile_x * TILE_SIZE - self.w
+        self.dx = 0
+    if self.dx < 0:
+      if point_inside_block(left, top + 1) or point_inside_block(left, bottom - 1):
+        tile_x = int(left // TILE_SIZE) + 1
+        self.x = tile_x * TILE_SIZE
+        self.dx = 0
+    
+
+    self.y += self.dy * dt
+
+    # recompute edges again
+    left = self.x
+    right = self.x + self.w - 1
+    top = self.y
+    bottom = self.y + self.h - 1
+    if self.dy > 0:
+      if point_inside_block(right - 1, bottom) or point_inside_block(left + 1, bottom):
+        tile_y = int(bottom // TILE_SIZE)
+        self.y = tile_y * TILE_SIZE - self.h
+        self.dy = 0
+        self.on_ground = True
+    if self.dy < 0:
+      if point_inside_block(right - 1, top) or point_inside_block(left + 1, top):
+        tile_y = int(top // TILE_SIZE) + 1
+        self.y = tile_y * TILE_SIZE
+        self.dy = 0
+
+  def render(self):
+    pygame.draw.rect(display, (0, 255, 255), (self.x, self.y, self.w, self.h))
+  
 pygame.init()
 display = pygame.display.set_mode((DISPLAY_WIDTH, DISPLAY_HEIGHT))
 is_game_running = True
@@ -114,37 +198,25 @@ def draw_level():
       pygame.draw.rect(display, (255, 255, 255), rect, 1)
 
 light_x, light_y = compute_middle_of_tile_in_pixels(3, 3)
-light_speed = 100
+light = Light(light_x, light_y, 256)
+player = Player(*compute_middle_of_tile_in_pixels(12, 12))
 
 while is_game_running:
   display.fill((0, 0, 0))
   dt = clock.tick(FPS) / 1000
 
-  light_dx = 0
-  light_dy = 0
-
   keys = pygame.key.get_pressed()
-  if keys[pygame.K_LEFT]:
-    light_dx -= light_speed
-  if keys[pygame.K_RIGHT]:
-    light_dx += light_speed
-  if keys[pygame.K_UP]:
-    light_dy -= light_speed
-  if keys[pygame.K_DOWN]:
-    light_dy += light_speed
   if keys[pygame.K_ESCAPE]:
     is_game_running = False
   for event in pygame.event.get():
     if event.type == pygame.QUIT:
       is_game_running = False
 
-  light_x += light_dx * dt
-  light_y += light_dy * dt
-
   draw_level()
-  light = Light(light_x, light_y, 256)
-  light.update()
+  light.update(dt)
   light.render()
+  player.update(dt)
+  player.render()
 
   pygame.display.flip()
 

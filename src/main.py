@@ -39,6 +39,18 @@ def point_inside_block(x, y):
 def distance(x1, x2, y1, y2):
   return math.sqrt(((x2 - x1) ** 2) + ((y2 - y1) ** 2))
 
+class Goal:
+  def __init__(self, tile_x, tile_y):
+    self.x, self.y = compute_middle_of_tile_in_pixels(tile_x, tile_y)
+    self.w = 10
+    self.h = 10
+
+  def update(self, dt):
+    pass
+
+  def render(self):
+    pygame.draw.rect(display, (0, 255, 0), (self.x - self.w//2, self.y - self.h//2, self.w, self.h))
+
 class Light:
   def __init__(self, x, y, num_rays):
     self.x = x
@@ -159,7 +171,6 @@ class Player:
         self.x = tile_x * TILE_SIZE
         self.dx = 0
     
-
     self.y += self.dy * dt
 
     # recompute edges again
@@ -200,6 +211,7 @@ def draw_level():
 light_x, light_y = compute_middle_of_tile_in_pixels(3, 3)
 light = Light(light_x, light_y, 256)
 player = Player(*compute_middle_of_tile_in_pixels(12, 12))
+goal = Goal(12, 4)
 
 while is_game_running:
   display.fill((0, 0, 0))
@@ -217,6 +229,7 @@ while is_game_running:
   light.render()
   player.update(dt)
   player.render()
+  goal.render()
 
   pygame.display.flip()
 

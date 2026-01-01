@@ -41,15 +41,22 @@ def distance(x1, x2, y1, y2):
 
 class Goal:
   def __init__(self, tile_x, tile_y):
-    self.x, self.y = compute_middle_of_tile_in_pixels(tile_x, tile_y)
     self.w = 10
     self.h = 10
+    self.x, self.y = compute_middle_of_tile_in_pixels(tile_x, tile_y)
+    self.x -= self.w // 2
+    self.y -= self.h // 2
 
   def update(self, dt):
     pass
 
   def render(self):
-    pygame.draw.rect(display, (0, 255, 0), (self.x - self.w//2, self.y - self.h//2, self.w, self.h))
+    pygame.draw.rect(display, (0, 255, 0), (self.x, self.y, self.w, self.h))
+
+  def set_tile_position(self, tile_x, tile_y):
+    self.x, self.y = compute_middle_of_tile_in_pixels(tile_x, tile_y)
+    self.x -= self.w // 2
+    self.y -= self.h // 2
 
 class Light:
   def __init__(self, x, y, num_rays):

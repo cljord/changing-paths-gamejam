@@ -39,6 +39,49 @@ def point_inside_block(x, y):
 def distance(x1, x2, y1, y2):
   return math.sqrt(((x2 - x1) ** 2) + ((y2 - y1) ** 2))
 
+# point in polygon functions from this video by Erudite
+# https://www.youtube.com/watch?v=TA8XQgiao4M
+def is_between(value, y1, y2):
+  # check if y value of point is "sandwiched"
+  # between the y values of two points
+  # that we iterate over in point-in-polygon testing
+  if ((y1 > y2 and y1 >= value > y2) or
+      y2 >= value > y1):
+    return True
+  return False
+
+def calc_intersection(point, side_a, side_b):
+  """
+           / (x1, y1)
+          /
+(xp, yp) / <- we have y, what is x?
+        /
+       / (x2, y2)
+=> after calculating (xp, yp): if point is greater than
+calculated intersection, we can ignore it because we shoot ray to the right
+therefore: if greater => ray shot to right won't hit the line of the polygon
+  """
+  m = (side_b[1] - side_a[1]) / (side_b[0] - side_a[0])
+  x = ((point[1] - side_a[1])/m) + side_a[0]
+  y = point[1]
+  return (x, y)
+
+def is_inside(point, polygon):
+  count = 0
+  for i in range(0, len(polygon)):
+    a = polygon[i-1]
+    b = polygon[i]
+    # a[1] != b[1] checks whether y coords of
+    # the two points are on one line => if so, no need to check ray
+    if (a[1] != b[1] and
+        is_between(point[1], a[1], b[1])):
+      intersection = calc_intersection(point, a, b)
+      if intersection[0] >= point[0]:
+        count += 1
+  if count % 2 == 0:
+    return False
+  return True
+
 class Goal:
   def __init__(self, tile_x, tile_y):
     self.w = 10
@@ -67,6 +110,7 @@ class Light:
     self.patrol_route = [(3, 3), (16, 3), (16, 11), (3, 11)]
     self.current_patrol_route_index = 1
     self.speed = 50
+    self.triangles = []
 
   def init_rays(self):
     rays = []
@@ -98,9 +142,11 @@ class Light:
     self.patrol(dt)
 
   def render_visibility_polygon(self):
+    self.triangles = []
     for index, intersection in enumerate(self.intersections):
       next_intersection = self.intersections[(index + 1) % len(self.intersections)]
       triangle = [(self.x, self.y), (intersection[0], intersection[1]), (next_intersection[0], next_intersection[1])]
+      self.triangles.append(triangle)
       pygame.draw.polygon(display, (255, 0, 0), triangle)
 
   def render(self):
@@ -237,6 +283,10 @@ while is_game_running:
   player.update(dt)
   player.render()
   goal.render()
+
+  for triangle in light.triangles:
+    if is_inside((player.x, player.y), triangle):
+      print("hitting me brooo")
 
   pygame.display.flip()
 

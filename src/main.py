@@ -1,6 +1,8 @@
-import pygame
+from dataclasses import dataclass
 import math
+import pygame
 import sys
+
 
 DISPLAY_WIDTH = 640
 DISPLAY_HEIGHT = 480
@@ -8,8 +10,62 @@ DISPLAY_HEIGHT = 480
 TILE_SIZE = 32
 FPS = 60
 
-def compute_middle_of_tile_in_pixels(tile_x, tile_y):
-  return (tile_x * TILE_SIZE) + (TILE_SIZE / 2), (tile_y * TILE_SIZE) + (TILE_SIZE / 2)
+class Light:
+  def __init__(self, x, y, num_rays):
+    self.x = x
+    self.y = y
+    self.num_rays = num_rays
+    self.intersections = []
+    self.patrol_route = [(3, 3), (16, 3), (16, 11), (3, 11)]
+    self.current_patrol_route_index = 1
+    self.speed = 50
+    self.triangles = []
+
+  def init_rays(self):
+    rays = []
+    for i in range(0, self.num_rays):
+      angle = ((2 * math.pi) / self.num_rays) * i
+      rays.append(Ray(self.x, self.y, angle))
+    return rays
+
+  def patrol(self, dt):
+    target_tile = self.patrol_route[self.current_patrol_route_index]
+    target_point = compute_middle_of_tile_in_pixels(*target_tile)
+    x_distance = target_point[0] - self.x
+    y_distance = target_point[1] - self.y
+    angle = math.atan2(y_distance, x_distance)
+    dx = math.cos(angle) * self.speed
+    dy = math.sin(angle) * self.speed
+    self.x += dx * dt
+    self.y += dy * dt
+    if math.sqrt((x_distance ** 2) + (y_distance ** 2)) < 2:
+      self.current_patrol_route_index += 1
+      self.current_patrol_route_index %= len(self.patrol_route)
+
+  def update(self, dt):
+    rays = self.init_rays()
+    self.intersections = []
+    for ray in rays:
+      intersection = ray.compute_level_intersection_point()
+      self.intersections.append(intersection)
+    self.patrol(dt)
+
+  def render_visibility_polygon(self):
+    self.triangles = []
+    for index, intersection in enumerate(self.intersections):
+      next_intersection = self.intersections[(index + 1) % len(self.intersections)]
+      triangle = [(self.x, self.y), (intersection[0], intersection[1]), (next_intersection[0], next_intersection[1])]
+      self.triangles.append(triangle)
+      pygame.draw.polygon(display, (255, 0, 0), triangle)
+
+  def render(self):
+    self.render_visibility_polygon()
+    pygame.draw.circle(display, (255, 255, 0), (self.x, self.y), 10)
+
+@dataclass
+class Level:
+  tilemap: list[list[int]]
+  lights: list[Light]
 
 level = [
   [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
@@ -27,7 +83,10 @@ level = [
   [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
   [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
   [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-]
+] 
+
+def compute_middle_of_tile_in_pixels(tile_x, tile_y):
+  return (tile_x * TILE_SIZE) + (TILE_SIZE / 2), (tile_y * TILE_SIZE) + (TILE_SIZE / 2)
 
 def point_inside_block(x, y):
   if x < 0 or x > DISPLAY_WIDTH or y < 0 or y > DISPLAY_HEIGHT:
@@ -101,57 +160,7 @@ class Goal:
     self.x -= self.w // 2
     self.y -= self.h // 2
 
-class Light:
-  def __init__(self, x, y, num_rays):
-    self.x = x
-    self.y = y
-    self.num_rays = num_rays
-    self.intersections = []
-    self.patrol_route = [(3, 3), (16, 3), (16, 11), (3, 11)]
-    self.current_patrol_route_index = 1
-    self.speed = 50
-    self.triangles = []
 
-  def init_rays(self):
-    rays = []
-    for i in range(0, self.num_rays):
-      angle = ((2 * math.pi) / self.num_rays) * i
-      rays.append(Ray(self.x, self.y, angle))
-    return rays
-
-  def patrol(self, dt):
-    target_tile = self.patrol_route[self.current_patrol_route_index]
-    target_point = compute_middle_of_tile_in_pixels(*target_tile)
-    x_distance = target_point[0] - self.x
-    y_distance = target_point[1] - self.y
-    angle = math.atan2(y_distance, x_distance)
-    dx = math.cos(angle) * self.speed
-    dy = math.sin(angle) * self.speed
-    self.x += dx * dt
-    self.y += dy * dt
-    if math.sqrt((x_distance ** 2) + (y_distance ** 2)) < 2:
-      self.current_patrol_route_index += 1
-      self.current_patrol_route_index %= len(self.patrol_route)
-
-  def update(self, dt):
-    rays = self.init_rays()
-    self.intersections = []
-    for ray in rays:
-      intersection = ray.compute_level_intersection_point()
-      self.intersections.append(intersection)
-    self.patrol(dt)
-
-  def render_visibility_polygon(self):
-    self.triangles = []
-    for index, intersection in enumerate(self.intersections):
-      next_intersection = self.intersections[(index + 1) % len(self.intersections)]
-      triangle = [(self.x, self.y), (intersection[0], intersection[1]), (next_intersection[0], next_intersection[1])]
-      self.triangles.append(triangle)
-      pygame.draw.polygon(display, (255, 0, 0), triangle)
-
-  def render(self):
-    self.render_visibility_polygon()
-    pygame.draw.circle(display, (255, 255, 0), (self.x, self.y), 10)
 
 class Ray:
   def __init__(self, x, y, angle):

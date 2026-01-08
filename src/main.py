@@ -189,8 +189,8 @@ class Player:
     self.dy = 0
     self.speed = 200
     self.gravity = 300
-    self.initial_jump_velocity = 150
-    self.jump_velocity = 15
+    self.gravity_cut = 10 # extra gravity when jump is released
+    self.jump_velocity = -300
     self.on_ground = False
     self.jump_timer = 0
     self.max_jump_timer = 0.3
@@ -207,13 +207,11 @@ class Player:
 
     # jump
     if keys[pygame.K_UP] and self.on_ground:
-      self.dy -= self.initial_jump_velocity
+      self.dy += self.jump_velocity
       self.on_ground = False
-    elif keys[pygame.K_UP] and not self.on_ground and self.jump_timer < self.max_jump_timer:
-      self.jump_timer += dt
-      self.dy -= self.jump_velocity
-    elif not keys[pygame.K_UP] and not self.on_ground:
-      self.jump_timer = self.max_jump_timer
+    
+    if not keys[pygame.K_UP] and self.dy < 0:
+      self.dy += self.gravity * self.gravity_cut * dt
 
     self.dy += self.gravity * dt
 

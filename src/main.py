@@ -1,5 +1,7 @@
 from dataclasses import dataclass
+import json
 import math
+import os
 import pygame
 import sys
 
@@ -11,7 +13,8 @@ TILE_SIZE = 32
 FPS = 60
 
 class Light:
-  def __init__(self, x, y, num_rays):
+  def __init__(self, tilemap, x, y, num_rays):
+    self.tilemap = tilemap
     self.x = x
     self.y = y
     self.num_rays = num_rays
@@ -25,7 +28,7 @@ class Light:
     rays = []
     for i in range(0, self.num_rays):
       angle = ((2 * math.pi) / self.num_rays) * i
-      rays.append(Ray(self.x, self.y, angle))
+      rays.append(Ray(self.tilemap, self.x, self.y, angle))
     return rays
 
   def patrol(self, dt):
@@ -67,28 +70,17 @@ class Level:
   tilemap: list[list[int]]
   lights: list[Light]
 
-level = [
-  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-  [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-  [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-  [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-  [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-  [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1],
-  [1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1],
-  [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-  [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-  [1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1],
-  [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-  [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-  [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-  [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-] 
+level1 = []
+level1mtime = 0
+
+with open("./src/levels.json", "r") as levels:
+  level1 = json.load(levels)["level1"]
+  level1mtime = os.path.getmtime("./src/levels.json")
 
 def compute_middle_of_tile_in_pixels(tile_x, tile_y):
   return (tile_x * TILE_SIZE) + (TILE_SIZE / 2), (tile_y * TILE_SIZE) + (TILE_SIZE / 2)
 
-def point_inside_block(x, y):
+def point_inside_block(level, x, y):
   if x < 0 or x > DISPLAY_WIDTH or y < 0 or y > DISPLAY_HEIGHT:
     return True
   level_x = int(x // TILE_SIZE)
@@ -163,7 +155,8 @@ class Goal:
 
 
 class Ray:
-  def __init__(self, x, y, angle):
+  def __init__(self, tilemap, x, y, angle):
+    self.tilemap = tilemap
     self.x = x
     self.y = y
     self.angle = self.normalise_angle(angle)
@@ -181,22 +174,26 @@ class Ray:
     for c in steps:
       x = self.x + c * math.cos(self.angle)
       y = self.y + c * math.sin(self.angle)
-      if point_inside_block(x, y):
+      if point_inside_block(self.tilemap, x, y):
         break
     return x, y
 
 class Player:
-  def __init__(self, x, y):
+  def __init__(self, tilemap, x, y):
+    self.tilemap = tilemap
     self.x = x
     self.y = y
     self.w = 10
     self.h = 20
     self.dx = 0
     self.dy = 0
-    self.speed = 75
-    self.gravity = 100
-    self.jump_velocity = -200
+    self.speed = 200
+    self.gravity = 300
+    self.initial_jump_velocity = 150
+    self.jump_velocity = 15
     self.on_ground = False
+    self.jump_timer = 0
+    self.max_jump_timer = 0.3
 
   def update(self, dt):
     keys = pygame.key.get_pressed()
@@ -210,8 +207,14 @@ class Player:
 
     # jump
     if keys[pygame.K_UP] and self.on_ground:
-      self.dy = self.jump_velocity
+      self.dy -= self.initial_jump_velocity
       self.on_ground = False
+    elif keys[pygame.K_UP] and not self.on_ground and self.jump_timer < self.max_jump_timer:
+      self.jump_timer += dt
+      self.dy -= self.jump_velocity
+    elif not keys[pygame.K_UP] and not self.on_ground:
+      self.jump_timer = self.max_jump_timer
+
     self.dy += self.gravity * dt
 
     # axis separation, move x first, then y
@@ -222,13 +225,13 @@ class Player:
     top = self.y
     bottom = self.y + self.h - 1
     if self.dx > 0:
-      if point_inside_block(right, top + 1) or point_inside_block(right, bottom - 1):
+      if point_inside_block(self.tilemap, right, top + 1) or point_inside_block(self.tilemap, right, bottom - 1):
         # snap player and remove x velocity component
         tile_x = int(right // TILE_SIZE)
         self.x = tile_x * TILE_SIZE - self.w
         self.dx = 0
     if self.dx < 0:
-      if point_inside_block(left, top + 1) or point_inside_block(left, bottom - 1):
+      if point_inside_block(self.tilemap, left, top + 1) or point_inside_block(self.tilemap, left, bottom - 1):
         tile_x = int(left // TILE_SIZE) + 1
         self.x = tile_x * TILE_SIZE
         self.dx = 0
@@ -241,13 +244,14 @@ class Player:
     top = self.y
     bottom = self.y + self.h - 1
     if self.dy > 0:
-      if point_inside_block(right - 1, bottom) or point_inside_block(left + 1, bottom):
+      if point_inside_block(self.tilemap, right - 1, bottom) or point_inside_block(self.tilemap, left + 1, bottom):
         tile_y = int(bottom // TILE_SIZE)
         self.y = tile_y * TILE_SIZE - self.h
         self.dy = 0
         self.on_ground = True
+        self.jump_timer = 0
     if self.dy < 0:
-      if point_inside_block(right - 1, top) or point_inside_block(left + 1, top):
+      if point_inside_block(self.tilemap, right - 1, top) or point_inside_block(self.tilemap, left + 1, top):
         tile_y = int(top // TILE_SIZE) + 1
         self.y = tile_y * TILE_SIZE
         self.dy = 0
@@ -261,7 +265,7 @@ is_game_running = True
 clock = pygame.Clock()
 
 def draw_level():
-  for row_index, row in enumerate(level):
+  for row_index, row in enumerate(level1):
     for column_index, entry in enumerate(row):
       if not entry:
         continue
@@ -271,13 +275,20 @@ def draw_level():
       pygame.draw.rect(display, (255, 255, 255), rect, 1)
 
 light_x, light_y = compute_middle_of_tile_in_pixels(3, 3)
-light = Light(light_x, light_y, 256)
-player = Player(*compute_middle_of_tile_in_pixels(12, 12))
+light = Light(level1, light_x, light_y, 256)
+player = Player(level1, *compute_middle_of_tile_in_pixels(12, 12))
 goal = Goal(12, 4)
 
 while is_game_running:
   display.fill((0, 0, 0))
   dt = clock.tick(FPS) / 1000
+
+  if os.path.getmtime("./src/levels.json") != level1mtime:
+    with open("./src/levels.json", "r") as levels:
+      level1 = json.load(levels)["level1"]
+      level1mtime = os.path.getmtime("./src/levels.json")
+      player = Player(level1, player.x, player.x)
+      light = Light(level1, light.x, light.y, 256)
 
   keys = pygame.key.get_pressed()
   if keys[pygame.K_ESCAPE]:

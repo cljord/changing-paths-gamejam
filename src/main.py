@@ -4,7 +4,7 @@ import math
 import os
 import pygame
 import sys
-
+from enum import Enum
 
 DISPLAY_WIDTH = 640
 DISPLAY_HEIGHT = 480
@@ -13,15 +13,15 @@ TILE_SIZE = 32
 FPS = 60
 
 class Light:
-  def __init__(self, tilemap, x, y, num_rays):
+  def __init__(self, tilemap, x, y, patrol_route, num_rays=256):
     self.tilemap = tilemap
     self.x = x
     self.y = y
     self.num_rays = num_rays
     self.intersections = []
-    self.patrol_route = [(3, 3), (16, 3), (16, 11), (3, 11)]
+    self.patrol_route = patrol_route
     self.current_patrol_route_index = 1
-    self.speed = 50
+    self.speed = 100
     self.triangles = []
 
   def init_rays(self):
@@ -65,17 +65,6 @@ class Light:
     self.render_visibility_polygon()
     pygame.draw.circle(display, (255, 255, 0), (self.x, self.y), 10)
 
-@dataclass
-class Level:
-  tilemap: list[list[int]]
-  lights: list[Light]
-
-level1 = []
-level1mtime = 0
-
-with open("./src/levels.json", "r") as levels:
-  level1 = json.load(levels)["level1"]
-  level1mtime = os.path.getmtime("./src/levels.json")
 
 def compute_middle_of_tile_in_pixels(tile_x, tile_y):
   return (tile_x * TILE_SIZE) + (TILE_SIZE / 2), (tile_y * TILE_SIZE) + (TILE_SIZE / 2)
@@ -262,8 +251,8 @@ display = pygame.display.set_mode((DISPLAY_WIDTH, DISPLAY_HEIGHT))
 is_game_running = True
 clock = pygame.Clock()
 
-def draw_level():
-  for row_index, row in enumerate(level1):
+def draw_tilemap(tilemap):
+  for row_index, row in enumerate(tilemap):
     for column_index, entry in enumerate(row):
       if not entry:
         continue
@@ -272,21 +261,61 @@ def draw_level():
       rect = pygame.Rect(x, y, TILE_SIZE, TILE_SIZE)
       pygame.draw.rect(display, (255, 255, 255), rect, 1)
 
-light_x, light_y = compute_middle_of_tile_in_pixels(3, 3)
-light = Light(level1, light_x, light_y, 256)
-player = Player(level1, *compute_middle_of_tile_in_pixels(12, 12))
-goal = Goal(12, 4)
+@dataclass
+class Level:
+  tilemap: list[list[int]]
+  lights: list[Light]
+  player: Player
+  goal: Goal
+
+current_level_index = 1
+
+def load_level(level_file):
+  level = None
+  with open("./src/levels.json", "r") as levels:
+    level_data = json.load(levels)["1"]
+    tilemap = level_data["tilemap"]
+    player_start_pos = level_data["player_start_pos"]
+    player = Player(tilemap, *compute_middle_of_tile_in_pixels(*player_start_pos))
+    goal_pos = level_data["goal_pos"]
+    goal = Goal(*goal_pos)
+    lights = []
+    for light in level_data["lights"]:
+      start_pos = light["start_pos"]
+      patrol_route = [tuple(patrol_point) for patrol_point in light["patrol_route"]]
+      lights.append(Light(tilemap, *compute_middle_of_tile_in_pixels(start_pos[0], start_pos[1]), patrol_route))
+    level = Level(tilemap, lights, player, goal)
+    #level_json_loading_time = os.path.getmtime("./src/levels.json")
+  return level
+
+current_level = load_level("./src/levels.json")
+level_json_loading_time = 0
+
+#light_x, light_y = compute_middle_of_tile_in_pixels(3, 3)
+#light = Light(current_level, light_x, light_y)
+#player = Player(current_level, *compute_middle_of_tile_in_pixels(12, 12))
+#goal = Goal(12, 4)
+
+class game_states(Enum):
+  play_state = 1
+  dead_state = 2
+  finish_state = 3
+
+current_game_state = game_states.play_state
+
+def display_death_text():
+  ...
 
 while is_game_running:
   display.fill((0, 0, 0))
   dt = clock.tick(FPS) / 1000
 
-  if os.path.getmtime("./src/levels.json") != level1mtime:
-    with open("./src/levels.json", "r") as levels:
-      level1 = json.load(levels)["level1"]
-      level1mtime = os.path.getmtime("./src/levels.json")
-      player = Player(level1, player.x, player.x)
-      light = Light(level1, light.x, light.y, 256)
+  #if os.path.getmtime("./src/levels.json") != level_json_loading_time:
+    #with open("./src/levels.json", "r") as levels:
+      #current_level = json.load(levels)["1"]
+      #level_json_loading_time = os.path.getmtime("./src/levels.json")
+      #player = Player(current_level, player.x, player.x)
+      #light = Light(current_level, light.x, light.y, 256)
 
   keys = pygame.key.get_pressed()
   if keys[pygame.K_ESCAPE]:
@@ -295,16 +324,32 @@ while is_game_running:
     if event.type == pygame.QUIT:
       is_game_running = False
 
-  draw_level()
-  light.update(dt)
-  light.render()
-  player.update(dt)
-  player.render()
-  goal.render()
+  draw_tilemap(current_level.tilemap)
+  if current_game_state == game_states.play_state:
+    for light in current_level.lights:
+      light.update(dt)
+    current_level.player.update(dt)
 
-  for triangle in light.triangles:
-    if is_inside((player.x, player.y), triangle):
-      print("hitting me brooo")
+    for light in current_level.lights:
+      light.render()
+    current_level.goal.render()
+    current_level.player.render()
+
+  if current_game_state == game_states.dead_state:
+    for light in current_level.lights:
+      light.update(dt)
+    current_level.player.update(dt)
+
+    for light in current_level.lights:
+      light.render()
+    current_level.goal.render()
+    current_level.player.render()
+
+  for light in current_level.lights:
+    for triangle in light.triangles:
+      if is_inside((current_level.player.x, current_level.player.y), triangle):
+        current_game_state = game_states.dead_state
+        print("hitting me brooo")
 
   pygame.display.flip()
 

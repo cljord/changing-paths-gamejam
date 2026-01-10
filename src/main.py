@@ -13,7 +13,7 @@ TILE_SIZE = 32
 FPS = 60
 
 class Light:
-  def __init__(self, tilemap, x, y, patrol_route, num_rays=256):
+  def __init__(self, tilemap, x, y, patrol_route, num_rays=900):
     self.tilemap = tilemap
     self.x = x
     self.y = y
@@ -23,6 +23,7 @@ class Light:
     self.current_patrol_route_index = 1
     self.speed = 100
     self.triangles = []
+    self.rays = self.init_rays()
 
   def init_rays(self):
     rays = []
@@ -30,6 +31,13 @@ class Light:
       angle = ((2 * math.pi) / self.num_rays) * i
       rays.append(Ray(self.tilemap, self.x, self.y, angle))
     return rays
+
+  def update_rays(self):
+    for i, ray in enumerate(self.rays):
+      angle = ((2 * math.pi) / self.num_rays) * i
+      self.rays[i].x = self.x
+      self.rays[i].y = self.y
+      self.rays[i].angle = angle
 
   def patrol(self, dt):
     target_tile = self.patrol_route[self.current_patrol_route_index]
@@ -46,9 +54,9 @@ class Light:
       self.current_patrol_route_index %= len(self.patrol_route)
 
   def update(self, dt):
-    rays = self.init_rays()
+    rays = self.update_rays()
     self.intersections = []
-    for ray in rays:
+    for ray in self.rays:
       intersection = ray.compute_level_intersection_point()
       self.intersections.append(intersection)
     self.patrol(dt)
@@ -64,7 +72,6 @@ class Light:
   def render(self):
     self.render_visibility_polygon()
     pygame.draw.circle(display, (255, 255, 0), (self.x, self.y), 10)
-
 
 def compute_middle_of_tile_in_pixels(tile_x, tile_y):
   return (tile_x * TILE_SIZE) + (TILE_SIZE / 2), (tile_y * TILE_SIZE) + (TILE_SIZE / 2)
@@ -141,8 +148,6 @@ class Goal:
     self.x -= self.w // 2
     self.y -= self.h // 2
 
-
-
 class Ray:
   def __init__(self, tilemap, x, y, angle):
     self.tilemap = tilemap
@@ -159,7 +164,7 @@ class Ray:
   def compute_level_intersection_point(self):
     x = 0
     y = 0
-    steps = [c * 2 for c in range(0, 1500)]
+    steps = [c * 2 for c in range(0, 800)]
     for c in steps:
       x = self.x + c * math.cos(self.angle)
       y = self.y + c * math.sin(self.angle)
@@ -270,35 +275,34 @@ class Level:
 
 current_level_index = 1
 
-def load_level(level_file):
-  level = None
-  with open("./src/levels.json", "r") as levels:
-    level_data = json.load(levels)["1"]
-    tilemap = level_data["tilemap"]
-    player_start_pos = level_data["player_start_pos"]
-    player = Player(tilemap, *compute_middle_of_tile_in_pixels(*player_start_pos))
-    goal_pos = level_data["goal_pos"]
-    goal = Goal(*goal_pos)
-    lights = []
-    for light in level_data["lights"]:
-      start_pos = light["start_pos"]
-      patrol_route = [tuple(patrol_point) for patrol_point in light["patrol_route"]]
-      lights.append(Light(tilemap, *compute_middle_of_tile_in_pixels(start_pos[0], start_pos[1]), patrol_route))
-    level = Level(tilemap, lights, player, goal)
-    #level_json_loading_time = os.path.getmtime("./src/levels.json")
+def load_level(all_level_data, current_level_index):
+  current_level_data = all_level_data[str(current_level_index)]
+  tilemap = current_level_data["tilemap"]
+  player_start_pos = current_level_data["player_start_pos"]
+  player = Player(tilemap, *compute_middle_of_tile_in_pixels(*player_start_pos))
+  goal_pos = current_level_data["goal_pos"]
+  goal = Goal(*goal_pos)
+  lights = []
+  for light in current_level_data["lights"]:
+    start_pos = light["start_pos"]
+    patrol_route = [tuple(patrol_point) for patrol_point in light["patrol_route"]]
+    lights.append(Light(tilemap, *compute_middle_of_tile_in_pixels(start_pos[0], start_pos[1]), patrol_route))
+  level = Level(tilemap, lights, player, goal)
+  #level_json_loading_time = os.path.getmtime("./src/levels.json")
   return level
 
-current_level = load_level("./src/levels.json")
-level_json_loading_time = 0
+def load_level_data_from_file(level_file):
+  with open(level_file, "r") as levels:
+    return json.load(levels)
 
-#light_x, light_y = compute_middle_of_tile_in_pixels(3, 3)
-#light = Light(current_level, light_x, light_y)
-#player = Player(current_level, *compute_middle_of_tile_in_pixels(12, 12))
-#goal = Goal(12, 4)
+all_level_data = load_level_data_from_file("./src/levels.json")
+current_level = load_level(all_level_data, current_level_index)
+level_json_loading_time = 0
 
 class game_states(Enum):
   play_state = 1
   dead_state = 2
+  goal_state = 3
   finish_state = 3
 
 current_game_state = game_states.play_state
@@ -334,22 +338,28 @@ while is_game_running:
       light.render()
     current_level.goal.render()
     current_level.player.render()
+    player_rect = pygame.Rect(current_level.player.x, current_level.player. y, current_level.player.w, current_level.player.h)
+    goal_rect = pygame.Rect(current_level.goal.x, current_level.goal.y, current_level.goal.w, current_level.goal.h)
+    if player_rect.colliderect(goal_rect):
+      #current_game_state = game_states.goal_state
+      print("booya")
 
   if current_game_state == game_states.dead_state:
     for light in current_level.lights:
       light.update(dt)
-    current_level.player.update(dt)
-
     for light in current_level.lights:
       light.render()
     current_level.goal.render()
     current_level.player.render()
 
+    if keys[pygame.K_r]:
+      current_level = load_level(all_level_data, current_level_index)
+      current_game_state = game_states.play_state
+
   for light in current_level.lights:
     for triangle in light.triangles:
-      if is_inside((current_level.player.x, current_level.player.y), triangle):
+      if is_inside((current_level.player.x + current_level.player.w // 2, current_level.player.y + current_level.player.h // 2), triangle):
         current_game_state = game_states.dead_state
-        print("hitting me brooo")
 
   pygame.display.flip()
 

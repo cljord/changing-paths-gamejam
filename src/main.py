@@ -341,6 +341,8 @@ while is_game_running:
     player_rect = pygame.Rect(current_level.player.x, current_level.player. y, current_level.player.w, current_level.player.h)
     goal_rect = pygame.Rect(current_level.goal.x, current_level.goal.y, current_level.goal.w, current_level.goal.h)
     if player_rect.colliderect(goal_rect):
+      current_level_index += 1
+      current_level = load_level(all_level_data, current_level_index)
       #current_game_state = game_states.goal_state
       print("booya")
 

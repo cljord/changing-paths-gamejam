@@ -164,13 +164,17 @@ class Ray:
   def compute_level_intersection_point(self):
     x = 0
     y = 0
-    steps = [c * 2 for c in range(0, 800)]
+    steps = [c * 2 for c in range(0, 500)]
     for c in steps:
       x = self.x + c * math.cos(self.angle)
       y = self.y + c * math.sin(self.angle)
       if point_inside_block(self.tilemap, x, y):
         break
     return x, y
+
+  def cast(self):
+    xintercept, yintercept = 0, 0
+    xstep, ystep = 0, 0
 
 class Player:
   def __init__(self, tilemap, x, y):
@@ -344,6 +348,8 @@ while is_game_running:
       current_level_index += 1
       current_level = load_level(all_level_data, current_level_index)
       #current_game_state = game_states.goal_state
+      # TODO add check for whether we are done with all levels
+      # TODO if so, display finish logo
       print("booya")
 
   if current_game_state == game_states.dead_state:

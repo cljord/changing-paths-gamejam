@@ -172,9 +172,35 @@ class Ray:
         break
     return x, y
 
-  def cast(self):
-    xintercept, yintercept = 0, 0
-    xstep, ystep = 0, 0
+particles = []
+
+class RunParticle:
+  PARTICLE_WIDTH = 7
+  PARTICLE_HEIGHT = 7
+  DECAY_FACTOR = 3
+  def __init__(self, x, y):
+    self.x = x
+    self.y = y
+    self.w = self.PARTICLE_WIDTH
+    self.h = self.PARTICLE_HEIGHT
+    self.alive = True
+    self.decay_factor = self.DECAY_FACTOR
+    self.lifetime = 0
+
+  def update(self, dt):
+    self.lifetime += dt
+    self.w -= self.decay_factor * dt
+    self.h -= self.decay_factor * dt
+    if self.w <= 0.1 or self.h <= 0.1:
+      self.alive = False
+
+  def render(self):
+    rect_surf = pygame.Surface((math.floor(self.w), math.floor(self.h)), pygame.SRCALPHA)
+    pygame.draw.rect(rect_surf, (78, 78, 78), rect_surf.get_rect())
+    rotated_surface = pygame.transform.rotate(rect_surf, self.lifetime*180)
+    rotated_surface_rect = rotated_surface.get_rect(center=(self.x, self.y))
+    #display.blit(rotated_surface, (self.x, self.y, rotated_surface_rect.w, rotated_surface_rect.h))
+    display.blit(rotated_surface, rotated_surface_rect)
 
 class Player:
   def __init__(self, tilemap, x, y):
@@ -192,6 +218,9 @@ class Player:
     self.on_ground = False
     self.jump_timer = 0
     self.max_jump_timer = 0.3
+    self.squish_factor = 0
+    # TODO add coyote time + check for leaping off a tile (would allow a jump in midair currently)
+    # because on_ground is never changed)
 
   def update(self, dt):
     keys = pygame.key.get_pressed()
@@ -205,7 +234,7 @@ class Player:
 
     # jump
     if keys[pygame.K_UP] and self.on_ground:
-      self.dy += self.jump_velocity
+      self.dy = self.jump_velocity
       self.on_ground = False
     
     if not keys[pygame.K_UP] and self.dy < 0:
@@ -226,11 +255,17 @@ class Player:
         tile_x = int(right // TILE_SIZE)
         self.x = tile_x * TILE_SIZE - self.w
         self.dx = 0
+      else:
+        if self.on_ground:
+          particles.append(RunParticle(self.x, self.y + self.h))
     if self.dx < 0:
       if point_inside_block(self.tilemap, left, top + 1) or point_inside_block(self.tilemap, left, bottom - 1):
         tile_x = int(left // TILE_SIZE) + 1
         self.x = tile_x * TILE_SIZE
         self.dx = 0
+      else:
+        if self.on_ground:
+          particles.append(RunParticle(self.x + self.w, self.y + self.h))
     
     self.y += self.dy * dt
 
@@ -244,6 +279,8 @@ class Player:
         tile_y = int(bottom // TILE_SIZE)
         self.y = tile_y * TILE_SIZE - self.h
         self.dy = 0
+        if not self.on_ground:
+          self.squish_factor = 8
         self.on_ground = True
         self.jump_timer = 0
     if self.dy < 0:
@@ -252,8 +289,16 @@ class Player:
         self.y = tile_y * TILE_SIZE
         self.dy = 0
 
+    if abs(self.squish_factor) < 0.1:
+      self.squish_factor = 0
+
+    if self.squish_factor > 0:
+        self.squish_factor -= 20 * dt
+        if self.squish_factor < 0:
+            self.squish_factor = 0
+
   def render(self):
-    pygame.draw.rect(display, (0, 255, 255), (self.x, self.y, self.w, self.h))
+    pygame.draw.rect(display, (0, 255, 255), (self.x - self.squish_factor // 2, self.y + self.squish_factor, self.w + self.squish_factor, self.h - self.squish_factor))
   
 pygame.init()
 display = pygame.display.set_mode((DISPLAY_WIDTH, DISPLAY_HEIGHT))
@@ -352,6 +397,23 @@ while is_game_running:
       # TODO if so, display finish logo
       print("booya")
 
+    for light in current_level.lights:
+      for triangle in light.triangles:
+        if is_inside((current_level.player.x + current_level.player.w // 2, current_level.player.y + current_level.player.h // 2), triangle):
+          #current_game_state = game_states.dead_state
+          pass
+    
+    dead_particles = []
+    for particle in particles:
+      particle.update(dt)
+      if particle.alive:
+        particle.render()
+      else:
+        dead_particles.append(particle)
+
+    for particle in dead_particles:
+      particles.remove(particle)
+
   if current_game_state == game_states.dead_state:
     for light in current_level.lights:
       light.update(dt)
@@ -360,14 +422,21 @@ while is_game_running:
     current_level.goal.render()
     current_level.player.render()
 
-    if keys[pygame.K_r]:
-      current_level = load_level(all_level_data, current_level_index)
-      current_game_state = game_states.play_state
+    dead_particles = []
+    for particle in particles:
+      particle.update(dt)
+      if particle.alive:
+        particle.render()
+      else:
+        dead_particles.append(particle)
 
-  for light in current_level.lights:
-    for triangle in light.triangles:
-      if is_inside((current_level.player.x + current_level.player.w // 2, current_level.player.y + current_level.player.h // 2), triangle):
-        current_game_state = game_states.dead_state
+    for particle in dead_particles:
+      particles.remove(particle)
+
+  if keys[pygame.K_r]:
+    current_level = load_level(all_level_data, current_level_index)
+    particles = []
+    current_game_state = game_states.play_state
 
   pygame.display.flip()
 

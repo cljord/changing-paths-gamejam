@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import json
 import math
-import os
+import random
 import pygame
 import sys
 from enum import Enum
@@ -11,6 +11,11 @@ DISPLAY_HEIGHT = 480
 
 TILE_SIZE = 32
 FPS = 60
+
+world = pygame.Surface((DISPLAY_WIDTH, DISPLAY_HEIGHT), pygame.SRCALPHA)
+camera_shake = 0
+camera_shake_decay = 0.9
+slowdown = 1
 
 class Light:
   def __init__(self, tilemap, x, y, patrol_route, num_rays=900):
@@ -24,6 +29,9 @@ class Light:
     self.speed = 100
     self.triangles = []
     self.rays = self.init_rays()
+    self.time = 0
+    self.light_surface = pygame.Surface((DISPLAY_WIDTH, DISPLAY_HEIGHT), pygame.SRCALPHA)
+    self.noise_surface = pygame.Surface((DISPLAY_WIDTH, DISPLAY_HEIGHT), pygame.SRCALPHA)
 
   def init_rays(self):
     rays = []
@@ -49,12 +57,13 @@ class Light:
     dy = math.sin(angle) * self.speed
     self.x += dx * dt
     self.y += dy * dt
-    if math.sqrt((x_distance ** 2) + (y_distance ** 2)) < 2:
+    if math.sqrt((x_distance ** 2) + (y_distance ** 2)) < 5:
       self.current_patrol_route_index += 1
       self.current_patrol_route_index %= len(self.patrol_route)
 
   def update(self, dt):
-    rays = self.update_rays()
+    self.time += dt * 0.5
+    self.update_rays()
     self.intersections = []
     for ray in self.rays:
       intersection = ray.compute_level_intersection_point()
@@ -63,15 +72,28 @@ class Light:
 
   def render_visibility_polygon(self):
     self.triangles = []
+    self.light_surface.fill((0, 0, 0, 0))
+    light_brightness = int(180 + math.sin(self.time * 3) * 40)
     for index, intersection in enumerate(self.intersections):
       next_intersection = self.intersections[(index + 1) % len(self.intersections)]
       triangle = [(self.x, self.y), (intersection[0], intersection[1]), (next_intersection[0], next_intersection[1])]
       self.triangles.append(triangle)
-      pygame.draw.polygon(display, (255, 0, 0), triangle)
+      pygame.draw.polygon(self.light_surface, (255, 0, 0, light_brightness), triangle)
+    self.create_noise()
+    self.light_surface.blit(self.noise_surface, (0, 0), special_flags = pygame.BLEND_ADD)
+    world.blit(self.light_surface, (0, 0))
+
+  def create_noise(self):
+    self.noise_surface.fill((0, 0, 0, 0))
+    for _ in range(2500):
+      x = random.randint(0, DISPLAY_WIDTH)
+      y = random.randint(0, DISPLAY_HEIGHT)
+      alpha = random.randint(20, 50)
+      self.noise_surface.set_at((x, y), (255, 100, 0, alpha))
 
   def render(self):
     self.render_visibility_polygon()
-    pygame.draw.circle(display, (255, 255, 0), (self.x, self.y), 10)
+    pygame.draw.circle(world, (255, 255, 0), (self.x, self.y), 10)
 
 def compute_middle_of_tile_in_pixels(tile_x, tile_y):
   return (tile_x * TILE_SIZE) + (TILE_SIZE / 2), (tile_y * TILE_SIZE) + (TILE_SIZE / 2)
@@ -141,7 +163,7 @@ class Goal:
     pass
 
   def render(self):
-    pygame.draw.rect(display, (0, 255, 0), (self.x, self.y, self.w, self.h))
+    pygame.draw.rect(world, (0, 255, 0), (self.x, self.y, self.w, self.h))
 
   def set_tile_position(self, tile_x, tile_y):
     self.x, self.y = compute_middle_of_tile_in_pixels(tile_x, tile_y)
@@ -200,7 +222,7 @@ class RunParticle:
     rotated_surface = pygame.transform.rotate(rect_surf, self.lifetime*180)
     rotated_surface_rect = rotated_surface.get_rect(center=(self.x, self.y))
     #display.blit(rotated_surface, (self.x, self.y, rotated_surface_rect.w, rotated_surface_rect.h))
-    display.blit(rotated_surface, rotated_surface_rect)
+    world.blit(rotated_surface, rotated_surface_rect)
 
 class Player:
   def __init__(self, tilemap, x, y):
@@ -298,7 +320,7 @@ class Player:
             self.squish_factor = 0
 
   def render(self):
-    pygame.draw.rect(display, (0, 255, 255), (self.x - self.squish_factor // 2, self.y + self.squish_factor, self.w + self.squish_factor, self.h - self.squish_factor))
+    pygame.draw.rect(world, (0, 255, 255), (self.x - self.squish_factor // 2, self.y + self.squish_factor, self.w + self.squish_factor, self.h - self.squish_factor))
   
 pygame.init()
 display = pygame.display.set_mode((DISPLAY_WIDTH, DISPLAY_HEIGHT))
@@ -313,7 +335,7 @@ def draw_tilemap(tilemap):
       x = column_index * TILE_SIZE
       y = row_index * TILE_SIZE
       rect = pygame.Rect(x, y, TILE_SIZE, TILE_SIZE)
-      pygame.draw.rect(display, (255, 255, 255), rect, 1)
+      pygame.draw.rect(world, (255, 255, 255), rect, 1)
 
 @dataclass
 class Level:
@@ -338,6 +360,8 @@ def load_level(all_level_data, current_level_index):
     lights.append(Light(tilemap, *compute_middle_of_tile_in_pixels(start_pos[0], start_pos[1]), patrol_route))
   level = Level(tilemap, lights, player, goal)
   #level_json_loading_time = os.path.getmtime("./src/levels.json")
+  global particles 
+  particles = []
   return level
 
 def load_level_data_from_file(level_file):
@@ -360,8 +384,8 @@ def display_death_text():
   ...
 
 while is_game_running:
-  display.fill((0, 0, 0))
-  dt = clock.tick(FPS) / 1000
+  world.fill((0, 0, 0))
+  dt = clock.tick(FPS) * slowdown / 1000
 
   #if os.path.getmtime("./src/levels.json") != level_json_loading_time:
     #with open("./src/levels.json", "r") as levels:
@@ -400,8 +424,10 @@ while is_game_running:
     for light in current_level.lights:
       for triangle in light.triangles:
         if is_inside((current_level.player.x + current_level.player.w // 2, current_level.player.y + current_level.player.h // 2), triangle):
-          #current_game_state = game_states.dead_state
           pass
+          current_game_state = game_states.dead_state
+          camera_shake = 3
+          slowdown = 0.2
     
     dead_particles = []
     for particle in particles:
@@ -437,6 +463,16 @@ while is_game_running:
     current_level = load_level(all_level_data, current_level_index)
     particles = []
     current_game_state = game_states.play_state
+
+  offset_x, offset_y = 0, 0
+  if camera_shake > 0.1:
+    int_shake = int(camera_shake)
+    offset_x = random.randint(-int_shake, int_shake)
+    offset_y = random.randint(-int_shake, int_shake)
+    camera_shake *= camera_shake_decay
+  if slowdown < 1:
+    slowdown = min(slowdown + dt, 1)
+  display.blit(world, (offset_x, offset_y))
 
   pygame.display.flip()
 

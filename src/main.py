@@ -32,6 +32,7 @@ class Light:
     self.time = 0
     self.light_surface = pygame.Surface((DISPLAY_WIDTH, DISPLAY_HEIGHT), pygame.SRCALPHA)
     self.noise_surface = pygame.Surface((DISPLAY_WIDTH, DISPLAY_HEIGHT), pygame.SRCALPHA)
+    self.bloom_surface = pygame.Surface((DISPLAY_WIDTH, DISPLAY_HEIGHT), pygame.SRCALPHA)
 
   def init_rays(self):
     rays = []
@@ -81,7 +82,32 @@ class Light:
       pygame.draw.polygon(self.light_surface, (255, 0, 0, light_brightness), triangle)
     self.create_noise()
     self.light_surface.blit(self.noise_surface, (0, 0), special_flags = pygame.BLEND_ADD)
+    self.render_bloom(light_brightness)
     world.blit(self.light_surface, (0, 0))
+
+  # TODO implement bloom myself again so I know what's going on here
+  def render_bloom(self, intensity):
+    self.bloom_surface.fill((0, 0, 0, 0))
+
+    # Extract only bright light (kill dark reds)
+    self.bloom_surface.blit(self.light_surface, (0, 0))
+    self.bloom_surface.fill(
+        (intensity, 255, 255, 255),
+        special_flags=pygame.BLEND_MULT
+    )
+
+    # Strong blur
+    small = pygame.transform.smoothscale(
+        self.bloom_surface,
+        (DISPLAY_WIDTH // 15, DISPLAY_HEIGHT // 15)
+    )
+    blurred = pygame.transform.smoothscale(
+        small,
+        (DISPLAY_WIDTH, DISPLAY_HEIGHT)
+    )
+
+    # Additive blend ONLY
+    world.blit(blurred, (0, 0), special_flags=pygame.BLEND_ADD)
 
   def create_noise(self):
     self.noise_surface.fill((0, 0, 0, 0))
@@ -221,7 +247,6 @@ class RunParticle:
     pygame.draw.rect(rect_surf, (78, 78, 78), rect_surf.get_rect())
     rotated_surface = pygame.transform.rotate(rect_surf, self.lifetime*180)
     rotated_surface_rect = rotated_surface.get_rect(center=(self.x, self.y))
-    #display.blit(rotated_surface, (self.x, self.y, rotated_surface_rect.w, rotated_surface_rect.h))
     world.blit(rotated_surface, rotated_surface_rect)
 
 class Player:

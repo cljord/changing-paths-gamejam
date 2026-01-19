@@ -92,7 +92,7 @@ class Light:
     # Extract only bright light (kill dark reds)
     self.bloom_surface.blit(self.light_surface, (0, 0))
     self.bloom_surface.fill(
-        (intensity, 255, 255, 255),
+        (intensity, 0, 0, 255),
         special_flags=pygame.BLEND_MULT
     )
 
@@ -360,7 +360,7 @@ def draw_tilemap(tilemap):
       x = column_index * TILE_SIZE
       y = row_index * TILE_SIZE
       rect = pygame.Rect(x, y, TILE_SIZE, TILE_SIZE)
-      pygame.draw.rect(world, (255, 255, 255), rect, 1)
+      pygame.draw.rect(world, (255, 255, 255), rect, 2)
 
 @dataclass
 class Level:
@@ -411,6 +411,7 @@ def display_death_text():
 while is_game_running:
   world.fill((0, 0, 0))
   dt = clock.tick(FPS) * slowdown / 1000
+  print("dt ", dt)
 
   #if os.path.getmtime("./src/levels.json") != level_json_loading_time:
     #with open("./src/levels.json", "r") as levels:
@@ -440,6 +441,7 @@ while is_game_running:
     goal_rect = pygame.Rect(current_level.goal.x, current_level.goal.y, current_level.goal.w, current_level.goal.h)
     if player_rect.colliderect(goal_rect):
       current_level_index += 1
+      slowdown = 1
       current_level = load_level(all_level_data, current_level_index)
       #current_game_state = game_states.goal_state
       # TODO add check for whether we are done with all levels
@@ -486,18 +488,82 @@ while is_game_running:
 
   if keys[pygame.K_r]:
     current_level = load_level(all_level_data, current_level_index)
+    slowdown = 1
     particles = []
     current_game_state = game_states.play_state
 
-  offset_x, offset_y = 0, 0
+  # all these postprocessing effects are from https://dev.to/chrisgreening/simulating-simple-crt-and-glitch-effects-in-pygame-1mf1
+  # add scanlines
+  scanline_surface = pygame.Surface((DISPLAY_WIDTH, DISPLAY_HEIGHT), pygame.SRCALPHA)
+  for y in range(0, DISPLAY_HEIGHT, 4):
+    pygame.draw.line(scanline_surface, (0, 0, 0, 60), (0, y), (DISPLAY_WIDTH, y))
+
+  world.blit(scanline_surface, (0, 0))
+
+  # apply flicker - commented out because this doesn't look so good
+  #if random.randint(0, 20) == 0:
+    #flicker_surface = pygame.Surface((DISPLAY_WIDTH, DISPLAY_HEIGHT), pygame.SRCALPHA)
+    #flicker_surface.fill((255, 255, 255, 5))
+    #world.blit(flicker_surface, (0, 0))
+
+  # add glow/bloom
+  #glow_surf = pygame.transform.smoothscale(world, (DISPLAY_WIDTH // 2, DISPLAY_HEIGHT // 2))
+  #glow_surf = pygame.transform.smoothscale(glow_surf, (DISPLAY_WIDTH, DISPLAY_HEIGHT))
+  #glow_surf.set_alpha(100)
+  #world.blit(glow_surf, (0, 0))
+
+  glitch_surface = world.copy()
+  if random.random() < 0.1:
+    shift_amount = 30
+    y_start = random.randint(0, DISPLAY_HEIGHT - 20)
+    slice_height = random.randint(5, 20)
+    offset = random.randint(-shift_amount, shift_amount)
+
+    slice_area = pygame.Rect(0, y_start, DISPLAY_WIDTH, slice_height)
+    slice_copy = glitch_surface.subsurface(slice_area).copy()
+    glitch_surface.blit(slice_copy, (offset, y_start))
+
+  # chromatic aberration/RGB shift effect
+  # original code in article for postprocessing effect mentioned above
+  # was not working so well, so used ChatGPT to improve it
+  # basically: isolate R, G, B channels with BLEND_MULT
+  # (multiplying e.g. original surface with red fill means
+  # only red pixels survive at original strength)
+  # then combine with a slight offset
+  # RED channel
+  if random.random() < 0.02:
+    shift = random.randint(1, 3)
+    rgb = world.copy()
+
+    red = rgb.copy()
+    red.fill((255, 0, 0), special_flags=pygame.BLEND_MULT)
+    world.blit(red, (-shift, 0), special_flags=pygame.BLEND_ADD)
+
+    # GREEN channel
+    green = rgb.copy()
+    green.fill((0, 255, 0), special_flags=pygame.BLEND_MULT)
+    world.blit(green, (0, 0), special_flags=pygame.BLEND_ADD)
+
+    # BLUE channel
+    blue = rgb.copy()
+    blue.fill((0, 0, 255), special_flags=pygame.BLEND_MULT)
+    world.blit(blue, (shift, 2), special_flags=pygame.BLEND_ADD)
+
+  camera_x_offset, camera_y_offset = 0, 0
   if camera_shake > 0.1:
     int_shake = int(camera_shake)
-    offset_x = random.randint(-int_shake, int_shake)
-    offset_y = random.randint(-int_shake, int_shake)
+    camera_x_offset = random.randint(-int_shake, int_shake)
+    camera_y_offset = random.randint(-int_shake, int_shake)
     camera_shake *= camera_shake_decay
   if slowdown < 1:
     slowdown = min(slowdown + dt, 1)
-  display.blit(world, (offset_x, offset_y))
+
+  # pixelate - commented out for now because this has to be done last, so affects final
+  # call to blitting of the world surface, but just keeping this in here to maybe apply later
+  small_surf = pygame.transform.scale(world, (DISPLAY_WIDTH // 1.5, DISPLAY_HEIGHT // 1.5))
+  display.blit(pygame.transform.scale(small_surf, (DISPLAY_WIDTH, DISPLAY_HEIGHT)), (camera_x_offset, camera_y_offset))
+
+  #display.blit(world, (camera_x_offset, camera_y_offset))
 
   pygame.display.flip()
 

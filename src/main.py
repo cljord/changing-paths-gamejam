@@ -18,7 +18,7 @@ camera_shake_decay = 0.9
 slowdown = 1
 
 class Light:
-  def __init__(self, tilemap, x, y, patrol_route, num_rays=900):
+  def __init__(self, tilemap, x, y, patrol_route, num_rays=256):
     self.tilemap = tilemap
     self.x = x
     self.y = y
@@ -122,7 +122,7 @@ class Light:
     pygame.draw.circle(world, (255, 255, 0), (self.x, self.y), 10)
 
 def compute_middle_of_tile_in_pixels(tile_x, tile_y):
-  return (tile_x * TILE_SIZE) + (TILE_SIZE / 2), (tile_y * TILE_SIZE) + (TILE_SIZE / 2)
+  return (tile_x * TILE_SIZE) + (TILE_SIZE // 2), (tile_y * TILE_SIZE) + (TILE_SIZE // 2)
 
 def point_inside_block(level, x, y):
   if x < 0 or x > DISPLAY_WIDTH or y < 0 or y > DISPLAY_HEIGHT:
@@ -252,10 +252,10 @@ class RunParticle:
 class Player:
   def __init__(self, tilemap, x, y):
     self.tilemap = tilemap
-    self.x = x
-    self.y = y
     self.w = 10
     self.h = 20
+    self.x = x - self.w // 2
+    self.y = y - self.h // 2
     self.dx = 0
     self.dy = 0
     self.speed = 200
@@ -411,7 +411,6 @@ def display_death_text():
 while is_game_running:
   world.fill((0, 0, 0))
   dt = clock.tick(FPS) * slowdown / 1000
-  print("dt ", dt)
 
   #if os.path.getmtime("./src/levels.json") != level_json_loading_time:
     #with open("./src/levels.json", "r") as levels:
@@ -437,16 +436,6 @@ while is_game_running:
       light.render()
     current_level.goal.render()
     current_level.player.render()
-    player_rect = pygame.Rect(current_level.player.x, current_level.player. y, current_level.player.w, current_level.player.h)
-    goal_rect = pygame.Rect(current_level.goal.x, current_level.goal.y, current_level.goal.w, current_level.goal.h)
-    if player_rect.colliderect(goal_rect):
-      current_level_index += 1
-      slowdown = 1
-      current_level = load_level(all_level_data, current_level_index)
-      #current_game_state = game_states.goal_state
-      # TODO add check for whether we are done with all levels
-      # TODO if so, display finish logo
-      print("booya")
 
     for light in current_level.lights:
       for triangle in light.triangles:
@@ -466,6 +455,17 @@ while is_game_running:
 
     for particle in dead_particles:
       particles.remove(particle)
+
+    player_rect = pygame.Rect(current_level.player.x, current_level.player. y, current_level.player.w, current_level.player.h)
+    goal_rect = pygame.Rect(current_level.goal.x, current_level.goal.y, current_level.goal.w, current_level.goal.h)
+    if player_rect.colliderect(goal_rect):
+      current_level_index += 1
+      slowdown = 1
+      current_level = load_level(all_level_data, current_level_index)
+      #current_game_state = game_states.goal_state
+      # TODO add check for whether we are done with all levels
+      # TODO if so, display finish logo
+      print("booya")
 
   if current_game_state == game_states.dead_state:
     for light in current_level.lights:
@@ -522,6 +522,9 @@ while is_game_running:
     slice_area = pygame.Rect(0, y_start, DISPLAY_WIDTH, slice_height)
     slice_copy = glitch_surface.subsurface(slice_area).copy()
     glitch_surface.blit(slice_copy, (offset, y_start))
+
+  world.blit(glitch_surface, (0, 0))
+  
 
   # chromatic aberration/RGB shift effect
   # original code in article for postprocessing effect mentioned above

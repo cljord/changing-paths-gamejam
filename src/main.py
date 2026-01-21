@@ -234,6 +234,7 @@ class RunParticle:
     self.alive = True
     self.decay_factor = self.DECAY_FACTOR
     self.lifetime = 0
+    self.starting_rotation = random.random()*180
 
   def update(self, dt):
     self.lifetime += dt
@@ -245,7 +246,7 @@ class RunParticle:
   def render(self):
     rect_surf = pygame.Surface((math.floor(self.w), math.floor(self.h)), pygame.SRCALPHA)
     pygame.draw.rect(rect_surf, (78, 78, 78), rect_surf.get_rect())
-    rotated_surface = pygame.transform.rotate(rect_surf, self.lifetime*180)
+    rotated_surface = pygame.transform.rotate(rect_surf, (self.starting_rotation + self.lifetime)*180)
     rotated_surface_rect = rotated_surface.get_rect(center=(self.x, self.y))
     world.blit(rotated_surface, rotated_surface_rect)
 
@@ -266,6 +267,8 @@ class Player:
     self.jump_timer = 0
     self.max_jump_timer = 0.3
     self.squish_factor = 0
+    self.particle_timer = 0
+    self.particle_spawn_time = 0.01
     # TODO add coyote time + check for leaping off a tile (would allow a jump in midair currently)
     # because on_ground is never changed)
 
@@ -304,15 +307,25 @@ class Player:
         self.dx = 0
       else:
         if self.on_ground:
-          particles.append(RunParticle(self.x, self.y + self.h))
-    if self.dx < 0:
+          if self.particle_timer > 0:
+            self.particle_timer -= dt
+          else:
+            self.particle_timer = self.particle_spawn_time
+            particles.append(RunParticle(self.x, self.y + self.h))
+    elif self.dx < 0:
       if point_inside_block(self.tilemap, left, top + 1) or point_inside_block(self.tilemap, left, bottom - 1):
         tile_x = int(left // TILE_SIZE) + 1
         self.x = tile_x * TILE_SIZE
         self.dx = 0
       else:
         if self.on_ground:
-          particles.append(RunParticle(self.x + self.w, self.y + self.h))
+          if self.particle_timer > 0:
+            self.particle_timer -= dt
+          else:
+            self.particle_timer = self.particle_spawn_time
+            particles.append(RunParticle(self.x + self.w, self.y + self.h))
+    else:
+      self.particle_timer = 0
     
     self.y += self.dy * dt
 
@@ -343,6 +356,11 @@ class Player:
         self.squish_factor -= 20 * dt
         if self.squish_factor < 0:
             self.squish_factor = 0
+    
+    self.on_ground = (
+    point_inside_block(self.tilemap, left + 1, bottom + 1) or
+    point_inside_block(self.tilemap, right - 1, bottom + 1)
+    )
 
   def render(self):
     pygame.draw.rect(world, (0, 255, 255), (self.x - self.squish_factor // 2, self.y + self.squish_factor, self.w + self.squish_factor, self.h - self.squish_factor))

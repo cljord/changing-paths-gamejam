@@ -387,7 +387,7 @@ class Level:
   player: Player
   goal: Goal
 
-current_level_index = 1
+current_level_index = 2
 
 def load_level(all_level_data, current_level_index):
   current_level_data = all_level_data[str(current_level_index)]
@@ -429,6 +429,7 @@ def display_death_text():
 while is_game_running:
   world.fill((0, 0, 0))
   dt = clock.tick(FPS) * slowdown / 1000
+  dt = min(dt, 0.033)
 
   #if os.path.getmtime("./src/levels.json") != level_json_loading_time:
     #with open("./src/levels.json", "r") as levels:

@@ -387,7 +387,7 @@ class Level:
   player: Player
   goal: Goal
 
-current_level_index = 2
+current_level_index = 1
 
 def load_level(all_level_data, current_level_index):
   current_level_data = all_level_data[str(current_level_index)]

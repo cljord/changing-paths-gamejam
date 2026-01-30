@@ -6,6 +6,8 @@ import pygame
 import sys
 from enum import Enum
 
+from levels import levels
+
 DISPLAY_WIDTH = 640
 DISPLAY_HEIGHT = 480
 
@@ -387,10 +389,10 @@ class Level:
   player: Player
   goal: Goal
 
-current_level_index = 1
+current_level_index = 0
 
-def load_level(all_level_data, current_level_index):
-  current_level_data = all_level_data[str(current_level_index)]
+def load_level(levels, current_level_index):
+  current_level_data = levels[current_level_index]
   tilemap = current_level_data["tilemap"]
   player_start_pos = current_level_data["player_start_pos"]
   player = Player(tilemap, *compute_middle_of_tile_in_pixels(*player_start_pos))
@@ -407,12 +409,7 @@ def load_level(all_level_data, current_level_index):
   particles = []
   return level
 
-def load_level_data_from_file(level_file):
-  with open(level_file, "r") as levels:
-    return json.load(levels)
-
-all_level_data = load_level_data_from_file("./src/levels.json")
-current_level = load_level(all_level_data, current_level_index)
+current_level = load_level(levels, current_level_index)
 level_json_loading_time = 0
 
 class game_states(Enum):
@@ -480,7 +477,7 @@ while is_game_running:
     if player_rect.colliderect(goal_rect):
       current_level_index += 1
       slowdown = 1
-      current_level = load_level(all_level_data, current_level_index)
+      current_level = load_level(levels, current_level_index)
       #current_game_state = game_states.goal_state
       # TODO add check for whether we are done with all levels
       # TODO if so, display finish logo
@@ -506,7 +503,7 @@ while is_game_running:
       particles.remove(particle)
 
   if keys[pygame.K_r]:
-    current_level = load_level(all_level_data, current_level_index)
+    current_level = load_level(levels, current_level_index)
     slowdown = 1
     particles = []
     current_game_state = game_states.play_state

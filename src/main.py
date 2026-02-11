@@ -14,6 +14,8 @@ DISPLAY_HEIGHT = 480
 TILE_SIZE = 32
 FPS = 60
 
+RAY_STEPS = [c * 2 for c in range(0, 500)]
+
 world = pygame.Surface((DISPLAY_WIDTH, DISPLAY_HEIGHT), pygame.SRCALPHA)
 camera_shake = 0
 camera_shake_decay = 0.9
@@ -214,10 +216,11 @@ class Ray:
   def compute_level_intersection_point(self):
     x = 0
     y = 0
-    steps = [c * 2 for c in range(0, 500)]
-    for c in steps:
-      x = self.x + c * math.cos(self.angle)
-      y = self.y + c * math.sin(self.angle)
+    co = math.cos(self.angle)
+    si = math.sin(self.angle)
+    for c in RAY_STEPS:
+      x = self.x + c * co
+      y = self.y + c * si
       if point_inside_block(self.tilemap, x, y):
         break
     return x, y

@@ -416,10 +416,11 @@ current_level = load_level(levels, current_level_index)
 level_json_loading_time = 0
 
 class game_states(Enum):
+  title_state = 0
   play_state = 1
   dead_state = 2
   goal_state = 3
-  finish_state = 3
+  finish_state = 4
 
 current_game_state = game_states.play_state
 
@@ -445,7 +446,11 @@ while is_game_running:
     if event.type == pygame.QUIT:
       is_game_running = False
 
-  draw_tilemap(current_level.tilemap)
+  if not current_game_state == game_states.title_state:
+    draw_tilemap(current_level.tilemap)
+  if current_game_state == game_states.title_state:
+    # TODO add title screen with immediate mode GUI
+    pass
   if current_game_state == game_states.play_state:
     for light in current_level.lights:
       light.update(dt)
